@@ -2,89 +2,118 @@ import { getTursoClient } from './turso';
 import { User } from '../types';
 
 const generateId = (): string => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  return Date.now().toString(36) + Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2);
 };
 
-const rowToUser = (row: any): User => {
+const hashPassword = async (password: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + 'socializar_salt_2024');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const rowToUser = (row: any): User => ({
+  id: row.id,
+  email: row.email,
+  displayName: row.displayName,
+  photoURL: row.photoURL || '',
+  age: row.age || 18,
+  bio: row.bio || '',
+  interests: row.interests ? JSON.parse(row.interests) : [],
+  photos: row.photos ? JSON.parse(row.photos) : [],
+  location: { latitude: row.latitude || 0, longitude: row.longitude || 0 },
+  gender: row.gender || 'other',
+  lookingFor: row.lookingFor || 'both',
+  isPremium: row.isPremium === 1,
+  boostCount: row.boostCount || 3,
+  personality: row.personalityType ? {
+    type: row.personalityType,
+    score: row.personalityScore || 50,
+    description: row.personalityDesc || ''
+  } : undefined,
+  lastActive: new Date(row.lastActive || Date.now()),
+  createdAt: new Date(row.createdAt || Date.now())
+});
+
+export const signUp = async (
+  name: string,
+  email: string,
+  password: string
+): Promise<User | null> => {
+  const client = getTursoClient();
+
+  const existing = await client.execute({
+    sql: 'SELECT id FROM users WHERE email = ?',
+    args: [email]
+  });
+
+  if (existing.rows.length > 0) {
+    return null;
+  }
+
+  const id = generateId();
+  const hashedPass = await hashPassword(password);
+  const now = new Date().toISOString();
+
+  await client.execute({
+    sql: `INSERT INTO users (id, email, displayName, photoURL, age, bio, interests, photos, latitude, longitude, gender, lookingFor, isPremium, boostCount, passwordHash, personalityType, personalityScore, personalityDesc, lastActive, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      id, email, name, '', 18, '[]', '[]', '[]',
+      0, 0, 'other', 'both', 0, 3,
+      hashedPass, '', 0, '', now, now
+    ]
+  });
+
   return {
-    id: row.id,
-    email: row.email,
-    displayName: row.displayName,
-    photoURL: row.photoURL || '',
-    age: row.age || 18,
-    bio: row.bio || '',
-    interests: row.interests ? JSON.parse(row.interests) : [],
-    photos: row.photos ? JSON.parse(row.photos) : [],
-    location: {
-      latitude: row.latitude || 0,
-      longitude: row.longitude || 0,
-    },
-    gender: row.gender || 'other',
-    lookingFor: row.lookingFor || 'both',
-    isPremium: row.isPremium === 1,
-    boostCount: row.boostCount || 0,
-    personality: row.personalityType ? {
-      type: row.personalityType,
-      score: row.personalityScore || 50,
-      description: row.personalityDesc || ''
-    } : undefined,
-    lastActive: new Date(row.lastActive || Date.now()),
-    createdAt: new Date(row.createdAt || Date.now())
+    id,
+    email,
+    displayName: name,
+    photoURL: '',
+    age: 18,
+    bio: '',
+    interests: [],
+    photos: [],
+    location: { latitude: 0, longitude: 0 },
+    gender: 'other',
+    lookingFor: 'both',
+    isPremium: false,
+    boostCount: 3,
+    lastActive: new Date(),
+    createdAt: new Date()
   };
 };
 
-export const signInWithGoogle = async (): Promise<User | null> => {
-  try {
-    const email = prompt('Ingresá tu email para login:');
-    if (!email) return null;
+export const signIn = async (
+  email: string,
+  password: string
+): Promise<User | null> => {
+  const client = getTursoClient();
 
-    const client = getTursoClient();
-    const result = await client.execute({
-      sql: 'SELECT * FROM users WHERE email = ?',
-      args: [email]
-    });
+  const result = await client.execute({
+    sql: 'SELECT * FROM users WHERE email = ?',
+    args: [email]
+  });
 
-    if (result.rows.length > 0) {
-      return rowToUser(result.rows[0]);
-    }
-
-    const name = prompt('¿Cómo te llamás?') || 'Usuario';
-    const newUser: User = {
-      id: generateId(),
-      email,
-      displayName: name,
-      photoURL: '',
-      age: 18,
-      bio: '',
-      interests: [],
-      photos: [],
-      location: { latitude: 0, longitude: 0 },
-      gender: 'other',
-      lookingFor: 'both',
-      isPremium: false,
-      boostCount: 3,
-      lastActive: new Date(),
-      createdAt: new Date()
-    };
-
-    await client.execute({
-      sql: `INSERT INTO users (id, email, displayName, photoURL, age, bio, interests, photos, latitude, longitude, gender, lookingFor, isPremium, boostCount, personalityType, personalityScore, personalityDesc, lastActive, createdAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        newUser.id, newUser.email, newUser.displayName, newUser.photoURL,
-        newUser.age, newUser.bio, JSON.stringify(newUser.interests),
-        JSON.stringify(newUser.photos), newUser.location.latitude,
-        newUser.location.longitude, newUser.gender, newUser.lookingFor,
-        newUser.isPremium ? 1 : 0, newUser.boostCount,
-        '', 0, '', new Date().toISOString(), new Date().toISOString()
-      ]
-    });
-
-    return newUser;
-  } catch (error) {
-    console.error('Error in auth:', error);
+  if (result.rows.length === 0) {
     return null;
   }
+
+  const row = result.rows[0];
+  const hashedPass = await hashPassword(password);
+
+  if (row.passwordHash !== hashedPass) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  await client.execute({
+    sql: 'UPDATE users SET lastActive = ? WHERE id = ?',
+    args: [now, row.id as string]
+  });
+
+  return rowToUser(row);
 };
 
 export const logout = async (): Promise<void> => {
