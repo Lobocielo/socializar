@@ -1,88 +1,57 @@
-import { getTursoClient } from './turso';
 import { Message } from '../types';
 
-const generateId = (): string => {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-};
+const generateId = (): string => Date.now().toString(36) + Math.random().toString(36).substr(2);
+const MESSAGES_KEY = 'socializar_messages';
+const MATCHES_KEY = 'socializar_matches';
 
-export const sendMessage = async (
-  matchId: string,
-  senderId: string,
-  content: string,
-  isAI: boolean = false
-): Promise<Message | null> => {
-  const client = getTursoClient();
-  const messageId = generateId();
-  const timestamp = new Date().toISOString();
+function getStore<T>(key: string): T[] {
+  try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
+}
+function setStore<T>(key: string, data: T[]): void {
+  localStorage.setItem(key, JSON.stringify(data));
+}
 
-  await client.execute({
-    sql: 'INSERT INTO messages (id, matchId, senderId, content, timestamp, isAI, read) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    args: [messageId, matchId, senderId, content, timestamp, isAI ? 1 : 0, 0]
-  });
+export const sendMessage = async (matchId: string, senderId: string, content: string, isAI: boolean = false): Promise<Message | null> => {
+  const messages = getStore<any>(MESSAGES_KEY);
+  const msg = { id: generateId(), matchId, senderId, content, timestamp: new Date().toISOString(), isAI: isAI ? 1 : 0, read: 0 };
+  messages.push(msg);
+  setStore(MESSAGES_KEY, messages);
 
-  await client.execute({
-    sql: 'UPDATE matches SET lastMessageContent = ?, lastMessageTime = ?, unreadCount = unreadCount + 1 WHERE id = ?',
-    args: [content, timestamp, matchId]
-  });
+  const matches = getStore<any>(MATCHES_KEY);
+  const idx = matches.findIndex(m => m.id === matchId);
+  if (idx !== -1) {
+    matches[idx].lastMessageContent = content;
+    matches[idx].lastMessageTime = new Date().toISOString();
+    matches[idx].unreadCount = (matches[idx].unreadCount || 0) + 1;
+    setStore(MATCHES_KEY, matches);
+  }
 
-  return {
-    id: messageId,
-    matchId,
-    senderId,
-    content,
-    timestamp: new Date(timestamp),
-    isAI,
-    read: false
-  };
+  return { id: msg.id, matchId, senderId, content, timestamp: new Date(msg.timestamp), isAI: !!msg.isAI, read: false };
 };
 
 export const getMessages = async (matchId: string): Promise<Message[]> => {
-  const client = getTursoClient();
-
-  const result = await client.execute({
-    sql: 'SELECT * FROM messages WHERE matchId = ? ORDER BY timestamp ASC',
-    args: [matchId]
-  });
-
-  return result.rows.map(row => ({
-    id: row.id as string,
-    matchId: row.matchId as string,
-    senderId: row.senderId as string,
-    content: row.content as string,
-    timestamp: new Date(row.timestamp as string),
-    isAI: row.isAI === 1,
-    read: row.read === 1
-  }));
+  const messages = getStore<any>(MESSAGES_KEY);
+  return messages
+    .filter(m => m.matchId === matchId)
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .map(m => ({ id: m.id, matchId: m.matchId, senderId: m.senderId, content: m.content, timestamp: new Date(m.timestamp), isAI: !!m.isAI, read: !!m.read }));
 };
 
-export const markMessagesAsRead = async (matchId: string, userId: string): Promise<void> => {
-  const client = getTursoClient();
+export const markMessagesAsRead = async (matchId: string, _userId: string): Promise<void> => {
+  const messages = getStore<any>(MESSAGES_KEY);
+  messages.forEach(m => { if (m.matchId === matchId) m.read = 1; });
+  setStore(MESSAGES_KEY, messages);
 
-  await client.execute({
-    sql: 'UPDATE messages SET read = 1 WHERE matchId = ? AND senderId != ? AND read = 0',
-    args: [matchId, userId]
-  });
-
-  await client.execute({
-    sql: 'UPDATE matches SET unreadCount = 0 WHERE id = ?',
-    args: [matchId]
-  });
+  const matches = getStore<any>(MATCHES_KEY);
+  const idx = matches.findIndex(m => m.id === matchId);
+  if (idx !== -1) { matches[idx].unreadCount = 0; setStore(MATCHES_KEY, matches); }
 };
 
-export const subscribeToMessages = (
-  matchId: string,
-  callback: (messages: Message[]) => void
-): (() => void) => {
+export const subscribeToMessages = (matchId: string, callback: (messages: Message[]) => void): (() => void) => {
   const interval = setInterval(async () => {
-    try {
-      const messages = await getMessages(matchId);
-      callback(messages);
-    } catch (error) {
-      console.error('Error polling messages:', error);
-    }
-  }, 2000);
-
+    const messages = await getMessages(matchId);
+    callback(messages);
+  }, 1000);
   getMessages(matchId).then(callback);
-
   return () => clearInterval(interval);
 };
