@@ -1,46 +1,61 @@
-import { createClient } from '@libsql/client';
+import { createClient, Client } from '@libsql/client';
 
-const TURSO_URL = import.meta.env.VITE_TURSO_DATABASE_URL || 'file:local.db';
-const TURSO_AUTH_TOKEN = import.meta.env.VITE_TURSO_AUTH_TOKEN || '';
+let tursoClient: Client | null = null;
 
-export const turso = createClient({
-  url: TURSO_URL,
-  authToken: TURSO_AUTH_TOKEN,
-});
+export const getTursoClient = (): Client => {
+  if (tursoClient) return tursoClient;
+
+  const url = import.meta.env.VITE_TURSO_DATABASE_URL;
+  const authToken = import.meta.env.VITE_TURSO_AUTH_TOKEN;
+
+  if (!url) {
+    throw new Error('VITE_TURSO_DATABASE_URL no está configurado');
+  }
+
+  tursoClient = createClient({
+    url,
+    authToken: authToken || undefined,
+  });
+
+  return tursoClient;
+};
 
 export const initDatabase = async (): Promise<void> => {
+  const client = getTursoClient();
+
   try {
-    await turso.executeMultiple(`
+    await client.executeMultiple(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         email TEXT NOT NULL,
         displayName TEXT NOT NULL,
-        photoURL TEXT,
-        age INTEGER,
-        bio TEXT,
-        interests TEXT,
-        photos TEXT,
-        latitude REAL,
-        longitude REAL,
-        gender TEXT,
-        lookingFor TEXT,
+        photoURL TEXT DEFAULT '',
+        age INTEGER DEFAULT 18,
+        bio TEXT DEFAULT '',
+        interests TEXT DEFAULT '[]',
+        photos TEXT DEFAULT '[]',
+        latitude REAL DEFAULT 0,
+        longitude REAL DEFAULT 0,
+        gender TEXT DEFAULT 'other',
+        lookingFor TEXT DEFAULT 'both',
         isPremium INTEGER DEFAULT 0,
-        boostCount INTEGER DEFAULT 0,
-        personality TEXT,
-        lastActive TEXT,
-        createdAt TEXT
+        boostCount INTEGER DEFAULT 3,
+        personalityType TEXT DEFAULT '',
+        personalityScore INTEGER DEFAULT 0,
+        personalityDesc TEXT DEFAULT '',
+        lastActive TEXT DEFAULT '',
+        createdAt TEXT DEFAULT ''
       );
 
       CREATE TABLE IF NOT EXISTS matches (
         id TEXT PRIMARY KEY,
         user1Id TEXT NOT NULL,
         user2Id TEXT NOT NULL,
-        compatibility INTEGER,
-        createdAt TEXT,
-        lastMessage TEXT,
-        unreadCount INTEGER DEFAULT 0,
-        FOREIGN KEY (user1Id) REFERENCES users(id),
-        FOREIGN KEY (user2Id) REFERENCES users(id)
+        compatibility INTEGER DEFAULT 0,
+        createdAt TEXT DEFAULT '',
+        lastMessageContent TEXT DEFAULT '',
+        lastMessageTime TEXT DEFAULT '',
+        unreadCount INTEGER DEFAULT 0
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -48,11 +63,9 @@ export const initDatabase = async (): Promise<void> => {
         matchId TEXT NOT NULL,
         senderId TEXT NOT NULL,
         content TEXT NOT NULL,
-        timestamp TEXT,
+        timestamp TEXT DEFAULT '',
         isAI INTEGER DEFAULT 0,
-        read INTEGER DEFAULT 0,
-        FOREIGN KEY (matchId) REFERENCES matches(id),
-        FOREIGN KEY (senderId) REFERENCES users(id)
+        read INTEGER DEFAULT 0
       );
 
       CREATE TABLE IF NOT EXISTS swipes (
@@ -60,27 +73,22 @@ export const initDatabase = async (): Promise<void> => {
         fromUserId TEXT NOT NULL,
         toUserId TEXT NOT NULL,
         liked INTEGER NOT NULL,
-        timestamp TEXT,
-        FOREIGN KEY (fromUserId) REFERENCES users(id),
-        FOREIGN KEY (toUserId) REFERENCES users(id)
+        timestamp TEXT DEFAULT ''
       );
 
-      CREATE TABLE IF NOT EXISTS reports (
-        id TEXT PRIMARY KEY,
-        reporterId TEXT NOT NULL,
-        reportedId TEXT NOT NULL,
-        reason TEXT,
-        description TEXT,
-        timestamp TEXT,
-        status TEXT DEFAULT 'pending',
-        FOREIGN KEY (reporterId) REFERENCES users(id),
-        FOREIGN KEY (reportedId) REFERENCES users(id)
+      CREATE TABLE IF NOT EXISTS daily_likes (
+        userId TEXT NOT NULL,
+        date TEXT NOT NULL,
+        count INTEGER DEFAULT 0,
+        PRIMARY KEY (userId, date)
       );
     `);
-    console.log('Database initialized successfully');
+
+    console.log('Turso database initialized');
   } catch (error) {
-    console.error('Error initializing database:', error);
+    console.error('Error initializing Turso:', error);
+    throw error;
   }
 };
 
-export default turso;
+export default getTursoClient;

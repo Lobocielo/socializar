@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FcGoogle } from 'react-icons/fc';
 import { signInWithGoogle } from '../services/auth';
 import { getCurrentLocation } from '../services/location';
 import { useStore } from '../store/useStore';
+import { initDatabase } from '../services/turso';
 import toast from 'react-hot-toast';
 
 const LoginPage: React.FC = () => {
@@ -12,9 +12,11 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const setUser = useStore((state) => state.setUser);
 
-  const handleGoogleLogin = async () => {
+  const handleLogin = async () => {
     setLoading(true);
     try {
+      await initDatabase();
+
       const user = await signInWithGoogle();
       if (user) {
         try {
@@ -22,22 +24,23 @@ const LoginPage: React.FC = () => {
           user.location = location;
           useStore.getState().setLocationEnabled(true);
         } catch {
-          toast.error('No se pudo obtener la ubicación. Algunas funciones estarán limitadas.');
+          toast('No se pudo obtener ubicación', { icon: '📍' });
         }
-        
+
         setUser(user);
+        localStorage.setItem('currentUser', JSON.stringify(user));
+
         toast.success('¡Bienvenido a Socializar!');
-        
+
         if (!user.bio || user.interests.length === 0) {
           navigate('/setup');
         } else {
           navigate('/swipe');
         }
-      } else {
-        toast.error('Error al iniciar sesión');
       }
     } catch (error) {
       toast.error('Error al iniciar sesión');
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -53,14 +56,11 @@ const LoginPage: React.FC = () => {
       >
         <div className="text-center mb-8">
           <motion.div
-            animate={{ 
+            animate={{
               scale: [1, 1.1, 1],
               rotate: [0, 5, -5, 0]
             }}
-            transition={{ 
-              duration: 2,
-              repeat: Infinity 
-            }}
+            transition={{ duration: 2, repeat: Infinity }}
             className="text-7xl mb-4"
           >
             💕
@@ -75,26 +75,23 @@ const LoginPage: React.FC = () => {
           </h2>
 
           <button
-            onClick={handleGoogleLogin}
+            onClick={handleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 rounded-xl py-4 px-6 font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-xl py-4 px-6 font-semibold hover:from-pink-600 hover:to-purple-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
             {loading ? (
-              <div className="w-6 h-6 border-3 border-gray-300 border-t-pink-500 rounded-full animate-spin"></div>
+              <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
             ) : (
               <>
-                <FcGoogle className="w-6 h-6" />
-                Continuar con Google
+                <span className="text-2xl">👤</span>
+                Iniciar Sesión
               </>
             )}
           </button>
 
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">
-              Al continuar, aceptás nuestros{' '}
-              <a href="#" className="text-pink-500 hover:underline">Términos</a>
-              {' '}y{' '}
-              <a href="#" className="text-pink-500 hover:underline">Política de Privacidad</a>
+              Ingresá tu email y nombre para empezar
             </p>
           </div>
 
@@ -116,7 +113,7 @@ const LoginPage: React.FC = () => {
 
         <div className="mt-6 text-center">
           <p className="text-white/60 text-sm">
-            ¿Ya tenés cuenta? Iniciá sesión con Google
+            ¿Ya tenés cuenta? Iniciá sesión
           </p>
         </div>
       </motion.div>

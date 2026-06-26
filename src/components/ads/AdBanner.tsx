@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { useStore } from '../../store/useStore';
-import { shouldShowAd, trackAdImpression, loadAdScript } from '../../services/ads';
+import { useNavigate } from 'react-router-dom';
 
 interface AdBannerProps {
   position: 'top' | 'between-profiles' | 'sidebar' | 'chat';
@@ -9,56 +9,46 @@ interface AdBannerProps {
 const AdBanner: React.FC<AdBannerProps> = ({ position }) => {
   const user = useStore((state) => state.user);
   const isPremium = useStore((state) => state.isPremium);
-  const adRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!user || isPremium) return;
-    
-    loadAdScript('adsense');
-    
-    const timer = setTimeout(() => {
-      if (adRef.current && shouldShowAd(user.id, position)) {
-        trackAdImpression(`adsense-${position}`, user.id);
-        
-        try {
-          (window as any).adsbygoogle = (window as any).adsbygoogle || [];
-          (window as any).adsbygoogle.push({});
-        } catch (e) {
-          console.log('AdSense not loaded');
-        }
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [user, isPremium, position]);
+  const navigate = useNavigate();
 
   if (!user || isPremium) {
     return null;
   }
 
+  const promos = [
+    {
+      title: '🌟 Socializar Premium',
+      subtitle: 'Likes ilimitados y más features',
+      cta: 'Descubrir',
+      color: 'from-pink-500 to-purple-500'
+    },
+    {
+      title: '⚡ Boost tu perfil',
+      subtitle: 'Que te vean más personas',
+      cta: 'Activar',
+      color: 'from-blue-500 to-indigo-500'
+    },
+    {
+      title: '🤖 Chat con IA',
+      subtitle: 'Nunca te quedes sin respuesta',
+      cta: 'Probar',
+      color: 'from-green-500 to-teal-500'
+    }
+  ];
+
+  const promo = promos[Math.floor(Math.random() * promos.length)];
+
   return (
-    <div className="ad-container rounded-xl overflow-hidden" ref={adRef}>
-      <ins
-        className="adsbygoogle"
-        style={{ display: 'block' }}
-        data-ad-client="ca-pub-XXXXXXX"
-        data-ad-slot="XXXXXXX"
-        data-ad-format="auto"
-        data-full-width-responsive="true"
-      />
-      
-      <div className="w-full bg-gray-100 rounded-xl p-3 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-xs text-gray-400 mb-1">Publicidad</p>
-          <div className="bg-gradient-to-r from-pink-100 to-purple-100 rounded-lg p-4">
-            <p className="text-sm text-gray-600">
-              🌟 Descubrí Socializar Premium 🌟
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Likes ilimitados y más features
-            </p>
-          </div>
+    <div className={`bg-gradient-to-r ${promo.color} rounded-xl p-4 cursor-pointer`}
+         onClick={() => navigate('/premium')}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-bold text-sm">{promo.title}</h3>
+          <p className="text-white/80 text-xs mt-0.5">{promo.subtitle}</p>
         </div>
+        <button className="bg-white text-gray-800 text-xs font-bold px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">
+          {promo.cta}
+        </button>
       </div>
     </div>
   );

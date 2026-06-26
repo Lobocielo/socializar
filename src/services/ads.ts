@@ -1,41 +1,33 @@
-import { AdConfig } from '../types';
+import { AdConfig, PremiumPlan } from '../types';
 
 export const AD_CONFIGS: AdConfig[] = [
   {
-    id: 'adsense-top',
+    id: 'internal-promo-1',
     type: 'banner',
     position: 'top',
     provider: 'adsense',
-    code: '<!-- Google AdSense Banner Top -->',
+    code: 'socializar-promo',
     active: true
   },
   {
-    id: 'adsense-between',
+    id: 'internal-promo-2',
     type: 'banner',
     position: 'between-profiles',
     provider: 'adsense',
-    code: '<!-- Google AdSense Between Profiles -->',
+    code: 'socializar-promo',
     active: true
   },
   {
-    id: 'adsterra-sidebar',
-    type: 'banner',
-    position: 'sidebar',
-    provider: 'adsterra',
-    code: '<!-- Adsterra Sidebar -->',
-    active: true
-  },
-  {
-    id: 'adsense-chat',
+    id: 'internal-promo-3',
     type: 'banner',
     position: 'chat',
     provider: 'adsense',
-    code: '<!-- Google AdSense Chat -->',
+    code: 'socializar-promo',
     active: true
   }
 ];
 
-export const PREMIUM_PLANS = [
+export const PREMIUM_PLANS: PremiumPlan[] = [
   {
     id: 'basic',
     name: 'Básico',
@@ -56,7 +48,7 @@ export const PREMIUM_PLANS = [
       'Likes ilimitados',
       'Sin anuncios',
       '5 Boosts por mes',
-      'Vió quién te vio',
+      'Vio quién te vio',
       'Chat con IA',
       'Prioridad en búsqueda'
     ],
@@ -82,14 +74,14 @@ export const PREMIUM_PLANS = [
 export const shouldShowAd = (userId: string, position: string): boolean => {
   const isPremiumUser = localStorage.getItem(`premium_${userId}`) === 'true';
   if (isPremiumUser) return false;
-  
+
   const lastAdTime = localStorage.getItem(`lastAd_${userId}_${position}`);
   const now = Date.now();
-  
-  if (lastAdTime && now - parseInt(lastAdTime) < 30000) {
+
+  if (lastAdTime && now - parseInt(lastAdTime) < 60000) {
     return false;
   }
-  
+
   localStorage.setItem(`lastAd_${userId}_${position}`, now.toString());
   return true;
 };
@@ -102,12 +94,6 @@ export const trackAdClick = (adId: string, userId: string): void => {
   console.log(`Ad click: ${adId} by user ${userId}`);
 };
 
-export const loadAdScript = (provider: 'adsense' | 'adsterra'): void => {
-  if (provider === 'adsense') {
-    const script = document.createElement('script');
-    script.async = true;
-    script.crossOrigin = 'anonymous';
-    script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXX';
-    document.head.appendChild(script);
-  }
+export const loadAdScript = (): void => {
+  // No external ad scripts needed
 };
